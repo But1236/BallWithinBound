@@ -2,6 +2,7 @@ import pygame
 import sys
 import math
 import random
+import colorsys
 
 # Initialize pygame
 pygame.init()
@@ -237,6 +238,88 @@ def create_slider(x, y, width, height, value, min_val, max_val, dragging=False):
     pygame.draw.rect(screen, WHITE, (slider_pos - 5, y - 5, 10, height + 10), 1)
 
 
+class Particle:
+    def __init__(self, x, y, velocity, color, max_distance):
+        self.x = x
+        self.y = y
+        self.velocity = velocity  # (vx, vy)
+        self.color = color
+        self.max_distance = max_distance
+        self.initial_x = x
+        self.initial_y = y
+        self.alive = True
+
+    def update(self):
+        # Update position
+        self.x += self.velocity[0] / FPS
+        self.y += self.velocity[1] / FPS
+        
+        # Calculate distance from initial position
+        distance = math.sqrt((self.x - self.initial_x)**2 + (self.y - self.initial_y)**2)
+        
+        # Check if particle is still alive
+        if distance >= self.max_distance:
+            self.alive = False
+        return self.alive
+
+    def draw(self, surface):
+        # Calculate distance from initial position
+        distance = math.sqrt((self.x - self.initial_x)**2 + (self.y - self.initial_y)**2)
+        
+        # Calculate alpha based on distance (linear fade out)
+        alpha = 255 * (1 - distance / self.max_distance)
+        alpha = max(0, min(255, int(alpha)))  # Clamp between 0 and 255
+        
+        # Create a temporary surface with per-pixel alpha
+        temp_surface = pygame.Surface((4, 4), pygame.SRCALPHA)
+        
+        # Create color with alpha
+        color_with_alpha = (*self.color, alpha)
+        
+        # Draw particle on temporary surface
+        pygame.draw.circle(temp_surface, color_with_alpha, (2, 2), 2)
+        
+        # Blit the temporary surface onto the main surface
+        surface.blit(temp_surface, (int(self.x) - 2, int(self.y) - 2))
+
+class ParticleSystem:
+    def __init__(self):
+        self.particles = []
+
+    def add_explosion(self, x, y, num_particles=20, max_distance=None):
+        if max_distance is None:
+            max_distance = 4.5 * ball_radius * 2  # 4.5 times ball diameter (1.5x the previous range)
+            
+        # Generate a random color for all particles in this explosion
+        hue = random.random()  # Random hue between 0 and 1
+        rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)  # Full saturation and brightness
+        color = (int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255))
+        
+        # Create particles moving in random directions
+        for _ in range(num_particles):
+            # Random angle
+            angle = random.uniform(0, 2 * math.pi)
+            
+            # Random speed (adjust as needed)
+            speed = random.uniform(50, 200)
+            
+            # Calculate velocity components
+            vx = speed * math.cos(angle)
+            vy = speed * math.sin(angle)
+            
+            # Create particle
+            particle = Particle(x, y, (vx, vy), color, max_distance)
+            self.particles.append(particle)
+
+    def update(self):
+        # Update all particles and remove dead ones
+        self.particles = [p for p in self.particles if p.update()]
+
+    def draw(self, surface):
+        # Draw all particles
+        for particle in self.particles:
+            particle.draw(surface)
+
 def initialize_ball_state(seed_value):
     """Initialize ball position and velocity based on random seed"""
     random.seed(seed_value)
@@ -262,6 +345,9 @@ def main():
     
     # Initialize trail points list
     trail_points = []
+    
+    # Initialize particle system
+    particle_system = ParticleSystem()
     
     # Slider dragging states
     dragging_acceleration = False
@@ -361,9 +447,16 @@ def main():
             # Handle collision response
             handle_collision(ball_vel, normal, collision_coefficient)
             
+            # Create particle explosion at collision point
+            if closest_point:
+                particle_system.add_explosion(closest_point[0], closest_point[1])
+            
             # Increase edges on collision if toggle is enabled
             if add_edge_enabled:
                 num_edges += 1
+                
+        # Update particle system
+        particle_system.update()
                 
         # Manage trail points
         if trail_enabled:
@@ -434,6 +527,10 @@ def main():
                             end_pos = (int(trail_points[i][0]), int(trail_points[i][1]))
                             # Draw with anti-aliasing if possible
                             pygame.draw.line(screen, base_color, start_pos, end_pos, line_width)
+                            
+        # Draw particles (before ball so they appear behind it)
+        particle_system.draw(screen)
+        
         # Draw pentagon center point
         pygame.draw.circle(screen, WHITE, pentagon_center, 3)
         
