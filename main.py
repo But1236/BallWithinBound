@@ -266,8 +266,10 @@ class Particle:
         # Calculate distance from initial position
         distance = math.sqrt((self.x - self.initial_x)**2 + (self.y - self.initial_y)**2)
         
-        # Calculate alpha based on distance (linear fade out)
-        alpha = 255 * (1 - distance / self.max_distance)
+        # Calculate alpha based on distance (quadratic fade out)
+        # Using formula: alpha = 255 * (1 - (distance / max_distance)^2)
+        normalized_distance = distance / self.max_distance
+        alpha = 255 * (1 - normalized_distance * normalized_distance)
         alpha = max(0, min(255, int(alpha)))  # Clamp between 0 and 255
         
         # Create a temporary surface with per-pixel alpha
