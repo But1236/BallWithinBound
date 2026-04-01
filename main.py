@@ -6,6 +6,7 @@ import colorsys
 
 # Initialize pygame
 pygame.init()
+pygame.mixer.init()
 
 # Screen dimensions
 WIDTH, HEIGHT = 800, 600
@@ -61,6 +62,18 @@ except:
 # Clock for controlling frame rate
 clock = pygame.time.Clock()
 FPS = 60
+
+# Sound variables
+sound_state = 0  # 0: OFF, 1: S1 (coin-collect.mp3), 2: S2 (toast-glass.mp3), 3: S3 (wood-crack.mp3)
+try:
+    sound_s1 = pygame.mixer.Sound("coin-collect.mp3")
+    sound_s2 = pygame.mixer.Sound("toast-glass.mp3")
+    sound_s3 = pygame.mixer.Sound("wood-crack.mp3")
+except pygame.error:
+    # If sound files are not found, create dummy sound objects
+    sound_s1 = None
+    sound_s2 = None
+    sound_s3 = None
 
 def get_polygon_vertices(center, radius, angle, num_sides):
     """Calculate the vertices of a regular polygon"""
@@ -340,7 +353,7 @@ def initialize_ball_state(seed_value):
     ball_vel[1] = speed * math.sin(angle)
 
 def main():
-    global rotation_angle, ball_pos, ball_vel, acceleration, collision_coefficient, random_seed, num_edges, trail_enabled, trail_duration
+    global rotation_angle, ball_pos, ball_vel, acceleration, collision_coefficient, random_seed, num_edges, trail_enabled, trail_duration, sound_state
     
     # Initialize ball state with random seed
     initialize_ball_state(random_seed)
@@ -360,6 +373,7 @@ def main():
     add_edge_enabled = False
     button_rect = pygame.Rect(WIDTH - 60, 10, 50, 30)
     trail_button_rect = pygame.Rect(WIDTH - 140, 10, 70, 30)  # Trail button to the left of EDGE button
+    sound_button_rect = pygame.Rect(WIDTH - 220, 10, 70, 30)  # Sound button to the left of TRAIL button
     
     running = True
     while running:
@@ -395,6 +409,10 @@ def main():
                 # Check if clicking on trail toggle button
                 if trail_button_rect.collidepoint(mouse_x, mouse_y):
                     trail_enabled = not trail_enabled
+                    
+                # Check if clicking on sound toggle button
+                if sound_button_rect.collidepoint(mouse_x, mouse_y):
+                    sound_state = (sound_state + 1) % 4  # Cycle through 0, 1, 2, 3
                 
             elif event.type == pygame.MOUSEBUTTONUP:
                 dragging_acceleration = False
@@ -456,6 +474,14 @@ def main():
             # Increase edges on collision if toggle is enabled
             if add_edge_enabled:
                 num_edges += 1
+                
+            # Play sound effect based on sound state
+            if sound_state == 1 and sound_s1:
+                sound_s1.play()
+            elif sound_state == 2 and sound_s2:
+                sound_s2.play()
+            elif sound_state == 3 and sound_s3:
+                sound_s3.play()
                 
         # Update particle system
         particle_system.update()
@@ -567,6 +593,25 @@ def main():
         # Draw trail toggle state text
         trail_state_text = small_font.render(f"Trail {'ON' if trail_enabled else 'OFF'}", True, WHITE)
         screen.blit(trail_state_text, (trail_button_rect.x - 10, trail_button_rect.y + 35))
+        
+        # Draw Sound button
+        sound_button_color = BUTTON_HOVER if sound_button_rect.collidepoint(pygame.mouse.get_pos()) else BUTTON_COLOR
+        pygame.draw.rect(screen, sound_button_color, sound_button_rect)
+        pygame.draw.rect(screen, WHITE, sound_button_rect, 2)
+        
+        # Draw sound button text based on sound state
+        if sound_state == 0:
+            sound_text = "OFF"
+        elif sound_state == 1:
+            sound_text = "S1"
+        elif sound_state == 2:
+            sound_text = "S2"
+        else:  # sound_state == 3
+            sound_text = "S3"
+            
+        sound_button_text = font.render(f"SOUND:{sound_text}", True, WHITE)
+        sound_text_rect = sound_button_text.get_rect(center=sound_button_rect.center)
+        screen.blit(sound_button_text, sound_text_rect)
         
         # Draw UI sliders and text
         acc_slider_y = 20
