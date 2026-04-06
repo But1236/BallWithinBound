@@ -3,13 +3,21 @@ import sys
 import math
 import random
 import colorsys
+from pygame import gfxdraw
+
+# Enable high DPI awareness for better display quality
+try:
+    import ctypes
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)  # For Windows
+except:
+    pass
 
 # Initialize pygame
 pygame.init()
 pygame.mixer.init()
 
-# Screen dimensions
-WIDTH, HEIGHT = 800, 600
+# Screen dimensions - Increased to 1.5 times original size
+WIDTH, HEIGHT = 1800, 1350
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("BallWithinBound")
 
@@ -22,42 +30,42 @@ BUTTON_COLOR = (100, 100, 100)
 BUTTON_HOVER = (120, 120, 120)
 
 # Physics parameters
-acceleration = 1.0  # Default acceleration
+acceleration = 9.8  # Default acceleration (Earth's gravity)
 collision_coefficient = 1.0  # Default collision coefficient (elastic)
 
 # Trail parameters
 trail_enabled = False  # Default trail state
-trail_duration = 5.0  # Default trail duration in seconds
+trail_duration = 1.5  # Default trail duration in seconds
 MAX_TRAIL_POINTS = 1000  # Maximum number of trail points to store
 
 # Random seed for reproducible initial conditions
 random_seed = 42  # Change this value to get different initial states
 
-# Pentagon parameters
-pentagon_radius = 200
+# Pentagon parameters - Scaled up for better visibility
+pentagon_radius = 450
 pentagon_center = (WIDTH // 2, HEIGHT // 2)
 rotation_speed = 30  # degrees per second
 rotation_angle = 0
 num_edges = 5  # Starting with pentagon (5 edges)
 
-# Ball parameters
-ball_radius = 8
+# Ball parameters - Scaled up for better visibility
+ball_radius = 22
 ball_pos = [pentagon_center[0], pentagon_center[1]]  # Will be initialized with random values
 ball_vel = [150.0, 0.0]  # Will be initialized with random values
 
-# Slider parameters
-slider_width = 200
-slider_height = 20
-slider_x = 10
-slider_margin = 40
+# Slider parameters - Scaled up for better visibility
+slider_width = 450
+slider_height = 45
+slider_x = 15
+slider_margin = 90
 
-# Font
+# Font - Larger sizes for better readability
 try:
-    font = pygame.font.SysFont('Arial', 20)
-    small_font = pygame.font.SysFont('Arial', 14)
+    font = pygame.font.SysFont('Arial', 48)
+    small_font = pygame.font.SysFont('Arial', 36)
 except:
-    font = pygame.font.Font(None, 20)
-    small_font = pygame.font.Font(None, 14)
+    font = pygame.font.Font(None, 48)
+    small_font = pygame.font.Font(None, 36)
 
 # Clock for controlling frame rate
 clock = pygame.time.Clock()
@@ -245,10 +253,12 @@ def create_slider(x, y, width, height, value, min_val, max_val, dragging=False):
     # Calculate slider position
     slider_pos = x + (value - min_val) / (max_val - min_val) * width
     
-    # Draw slider handle
+    # Draw slider handle (larger and more visible)
     handle_color = BUTTON_HOVER if dragging else BUTTON_COLOR
-    pygame.draw.rect(screen, handle_color, (slider_pos - 5, y - 5, 10, height + 10))
-    pygame.draw.rect(screen, WHITE, (slider_pos - 5, y - 5, 10, height + 10), 1)
+    handle_width = 20
+    handle_height = height + 20
+    pygame.draw.rect(screen, handle_color, (slider_pos - handle_width//2, y - (handle_height - height)//2, handle_width, handle_height))
+    pygame.draw.rect(screen, WHITE, (slider_pos - handle_width//2, y - (handle_height - height)//2, handle_width, handle_height), 2)
 
 
 class Particle:
@@ -285,23 +295,23 @@ class Particle:
         alpha = 255 * (1 - normalized_distance * normalized_distance)
         alpha = max(0, min(255, int(alpha)))  # Clamp between 0 and 255
         
-        # Create a temporary surface with per-pixel alpha
-        temp_surface = pygame.Surface((4, 4), pygame.SRCALPHA)
+        # Create a temporary surface with per-pixel alpha (1.5x larger)
+        temp_surface = pygame.Surface((6, 6), pygame.SRCALPHA)
         
         # Create color with alpha
         color_with_alpha = (*self.color, alpha)
         
-        # Draw particle on temporary surface
-        pygame.draw.circle(temp_surface, color_with_alpha, (2, 2), 2)
+        # Draw particle on temporary surface (1.5x larger)
+        pygame.draw.circle(temp_surface, color_with_alpha, (3, 3), 3)
         
         # Blit the temporary surface onto the main surface
-        surface.blit(temp_surface, (int(self.x) - 2, int(self.y) - 2))
+        surface.blit(temp_surface, (int(self.x) - 3, int(self.y) - 3))
 
 class ParticleSystem:
     def __init__(self):
         self.particles = []
 
-    def add_explosion(self, x, y, num_particles=20, max_distance=None):
+    def add_explosion(self, x, y, num_particles=30, max_distance=None):
         if max_distance is None:
             max_distance = 4.5 * ball_radius * 2  # 4.5 times ball diameter (1.5x the previous range)
             
@@ -315,8 +325,8 @@ class ParticleSystem:
             # Random angle
             angle = random.uniform(0, 2 * math.pi)
             
-            # Random speed (adjust as needed)
-            speed = random.uniform(50, 200)
+            # Random speed (adjust as needed) - 1.5 times faster
+            speed = random.uniform(75, 300)
             
             # Calculate velocity components
             vx = speed * math.cos(angle)
@@ -371,9 +381,9 @@ def main():
     
     # Toggle button state
     add_edge_enabled = False
-    button_rect = pygame.Rect(WIDTH - 60, 10, 50, 30)
-    trail_button_rect = pygame.Rect(WIDTH - 140, 10, 70, 30)  # Trail button to the left of EDGE button
-    sound_button_rect = pygame.Rect(WIDTH - 220, 10, 70, 30)  # Sound button to the left of TRAIL button
+    button_rect = pygame.Rect(WIDTH - 150, 10, 150, 90)  # 1.5x size
+    trail_button_rect = pygame.Rect(WIDTH - 350, 10, 180, 90)  # 1.5x size
+    sound_button_rect = pygame.Rect(WIDTH - 580, 10, 200, 90)  # 1.5x size (moved left)
     
     running = True
     while running:
@@ -424,7 +434,7 @@ def main():
                     mouse_x, mouse_y = pygame.mouse.get_pos()
                     # Calculate new acceleration value
                     relative_x = max(0, min(slider_width, mouse_x - slider_x))
-                    acceleration = 0.1 + (relative_x / slider_width) * 9.9  # Range: 0.1 to 10.0
+                    acceleration = 0.1 + (relative_x / slider_width) * 19.9  # Range: 0.1 to 20.0
                     
                 elif dragging_collision:
                     mouse_x, mouse_y = pygame.mouse.get_pos()
@@ -453,10 +463,11 @@ def main():
         # Get current polygon vertices
         vertices = get_polygon_vertices(pentagon_center, pentagon_radius, rotation_angle, num_edges)
         
-        # Update ball physics
-        ball_vel[1] += acceleration  # Apply acceleration (gravity)
-        ball_pos[0] += ball_vel[0] / FPS
-        ball_pos[1] += ball_vel[1] / FPS
+        # Update ball physics with proper scaling
+        dt = 1.0 / FPS  # Time delta
+        ball_vel[1] += acceleration * 10 * dt  # Apply acceleration (gravity) with scaling factor
+        ball_pos[0] += ball_vel[0] * 10 * dt
+        ball_pos[1] += ball_vel[1] * 10 * dt
         
         # Constrain ball to stay within inner polygon
         ball_pos = constrain_ball_to_polygon(ball_pos, pentagon_center, pentagon_radius, ball_radius, rotation_angle, num_edges)
@@ -508,7 +519,7 @@ def main():
         pygame.draw.polygon(screen, DARK_GRAY, vertices)
         pygame.draw.polygon(screen, WHITE, vertices, 2)
         
-        # Draw trail if enabled (draw after polygon so it's on top)
+        # Draw trail if enabled
         if trail_enabled and len(trail_points) > 1:
             # Draw trail with 12 gradient layers from purple to dark gray
             layer_colors = [
@@ -578,7 +589,7 @@ def main():
         
         # Draw toggle state text
         state_text = small_font.render(f"Add Edge {'ON' if add_edge_enabled else 'OFF'}", True, WHITE)
-        screen.blit(state_text, (button_rect.x - 10, button_rect.y + 35))
+        screen.blit(state_text, (button_rect.x - 20, button_rect.y + button_rect.height + 10))
         
         # Draw Trail button
         trail_button_color = BUTTON_HOVER if trail_button_rect.collidepoint(pygame.mouse.get_pos()) else BUTTON_COLOR
@@ -592,7 +603,7 @@ def main():
         
         # Draw trail toggle state text
         trail_state_text = small_font.render(f"Trail {'ON' if trail_enabled else 'OFF'}", True, WHITE)
-        screen.blit(trail_state_text, (trail_button_rect.x - 10, trail_button_rect.y + 35))
+        screen.blit(trail_state_text, (trail_button_rect.x + 20, trail_button_rect.y + trail_button_rect.height + 10))
         
         # Draw Sound button
         sound_button_color = BUTTON_HOVER if sound_button_rect.collidepoint(pygame.mouse.get_pos()) else BUTTON_COLOR
@@ -614,33 +625,37 @@ def main():
         screen.blit(sound_button_text, sound_text_rect)
         
         # Draw UI sliders and text
-        acc_slider_y = 20
-        col_slider_y = 20 + slider_margin
-        trail_slider_y = 20 + 2 * slider_margin
+        acc_slider_y = 30
+        col_slider_y = 30 + slider_margin
+        trail_slider_y = 30 + 2 * slider_margin
         
         # Acceleration slider
         create_slider(slider_x, acc_slider_y, slider_width, slider_height, 
-                      acceleration, 0.1, 10.0, dragging_acceleration)
+                      acceleration, 0.1, 20.0, dragging_acceleration)
         acc_label = font.render("Acceleration (a):", True, WHITE)
         acc_value = font.render(f"{acceleration:.1f}", True, WHITE)
-        screen.blit(acc_label, (slider_x + slider_width + 10, acc_slider_y))
-        screen.blit(acc_value, (slider_x + slider_width + 150, acc_slider_y))
+        screen.blit(acc_label, (slider_x + slider_width + 20, acc_slider_y + 10))
+        screen.blit(acc_value, (slider_x + slider_width + 300, acc_slider_y + 10))
         
         # Collision coefficient slider
         create_slider(slider_x, col_slider_y, slider_width, slider_height, 
                       collision_coefficient, 0.0, 1.0, dragging_collision)
         col_label = font.render("Collision (e):", True, WHITE)
         col_value = font.render(f"{collision_coefficient:.2f}", True, WHITE)
-        screen.blit(col_label, (slider_x + slider_width + 10, col_slider_y))
-        screen.blit(col_value, (slider_x + slider_width + 150, col_slider_y))
+        screen.blit(col_label, (slider_x + slider_width + 20, col_slider_y + 10))
+        screen.blit(col_value, (slider_x + slider_width + 300, col_slider_y + 10))
         
         # Trail duration slider
         create_slider(slider_x, trail_slider_y, slider_width, slider_height, 
                       trail_duration, 0.5, 10.0, dragging_trail_duration)
         trail_label = font.render("Trail Duration:", True, WHITE)
         trail_value = font.render(f"{trail_duration:.1f}s", True, WHITE)
-        screen.blit(trail_label, (slider_x + slider_width + 10, trail_slider_y))
-        screen.blit(trail_value, (slider_x + slider_width + 150, trail_slider_y))
+        screen.blit(trail_label, (slider_x + slider_width + 20, trail_slider_y + 10))
+        screen.blit(trail_value, (slider_x + slider_width + 300, trail_slider_y + 10))
+        
+        # Display current number of edges in bottom-left corner
+        edges_text = small_font.render(f"Edges: {num_edges}", True, WHITE)
+        screen.blit(edges_text, (10, HEIGHT - 50))
         
         # Update display
         pygame.display.flip()
