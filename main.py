@@ -29,6 +29,20 @@ RED = (255, 0, 0)
 BUTTON_COLOR = (100, 100, 100)
 BUTTON_HOVER = (120, 120, 120)
 
+# Neon colors for polygon edges (all yellow now)
+NEON_COLORS = [
+    (255, 255, 0),    # Yellow
+    (255, 255, 0),    # Yellow
+    (255, 255, 0),    # Yellow
+    (255, 255, 0),    # Yellow
+    (255, 255, 0),    # Yellow
+    (255, 255, 0),    # Yellow
+    (255, 255, 0),    # Yellow
+    (255, 255, 0),    # Yellow
+    (255, 255, 0),    # Yellow
+    (255, 255, 0)     # Yellow
+]
+
 # Physics parameters
 acceleration = 9.8  # Default acceleration (Earth's gravity)
 collision_coefficient = 1.0  # Default collision coefficient (elastic)
@@ -244,6 +258,51 @@ def handle_collision(ball_vel, normal, collision_coefficient):
     ball_vel[0] = ball_vel[0] - 2 * dot_product * normal[0] * collision_coefficient
     ball_vel[1] = ball_vel[1] - 2 * dot_product * normal[1] * collision_coefficient
 
+def draw_neon_glow(vertices, neon_color):
+    """Draw neon glow effect for polygon as a whole to avoid gaps at connections"""
+    # Draw multiple layers with decreasing alpha for glow effect (reduced to 6 layers for better performance)
+    for j in range(6, 0, -1):
+        # Calculate alpha based on layer (outer layers more transparent, lower base transparency)
+        # Make the closest layer (j=1) completely opaque
+        if j == 1:
+            alpha = 255  # Completely opaque for the closest layer
+        else:
+            alpha = 100 - j * 15  # From 100 to 25 (lower base transparency to reduce brightness)
+        alpha = max(0, min(255, alpha))  # Clamp between 0 and 255
+        
+        # Draw expanded polygon for glow effect (1x wider than original line)
+        glow_radius = j * 6  # From 36 to 6 for more visible glow (1x wider)
+        
+        # Create expanded vertices for glow effect
+        glow_vertices = []
+        center_x = sum(v[0] for v in vertices) / len(vertices)
+        center_y = sum(v[1] for v in vertices) / len(vertices)
+        
+        for vertex in vertices:
+            # Calculate direction vector from center to vertex
+            dx = vertex[0] - center_x
+            dy = vertex[1] - center_y
+            distance = math.sqrt(dx*dx + dy*dy)
+            
+            # Normalize and expand
+            if distance > 0:
+                dx /= distance
+                dy /= distance
+                
+            # Expand vertex outward
+            glow_x = vertex[0] + dx * glow_radius
+            glow_y = vertex[1] + dy * glow_radius
+            glow_vertices.append((glow_x, glow_y))
+        
+        # Create a temporary surface for this layer
+        temp_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        
+        # Draw filled polygon with glow color and alpha
+        pygame.draw.polygon(temp_surface, (*neon_color, alpha), glow_vertices)
+        
+        # Blit the glow layer onto the main screen
+        screen.blit(temp_surface, (0, 0))
+
 def create_slider(x, y, width, height, value, min_val, max_val, dragging=False):
     """Create a slider control"""
     # Draw slider track
@@ -381,7 +440,9 @@ def main():
     
     # Toggle button state
     add_edge_enabled = False
+    neon_glow_enabled = True  # Neon glow effect is enabled by default
     button_rect = pygame.Rect(WIDTH - 150, 10, 150, 90)  # 1.5x size
+    neon_glow_button_rect = pygame.Rect(WIDTH - 150, 160, 150, 90)  # Moved down to avoid overlapping with Add Edge text
     trail_button_rect = pygame.Rect(WIDTH - 350, 10, 180, 90)  # 1.5x size
     sound_button_rect = pygame.Rect(WIDTH - 580, 10, 200, 90)  # 1.5x size (moved left)
     
@@ -415,6 +476,10 @@ def main():
                 # Check if clicking on toggle button
                 if button_rect.collidepoint(mouse_x, mouse_y):
                     add_edge_enabled = not add_edge_enabled
+                    
+                # Check if clicking on neon glow toggle button
+                if neon_glow_button_rect.collidepoint(mouse_x, mouse_y):
+                    neon_glow_enabled = not neon_glow_enabled
                     
                 # Check if clicking on trail toggle button
                 if trail_button_rect.collidepoint(mouse_x, mouse_y):
@@ -515,9 +580,15 @@ def main():
         # Clear screen
         screen.fill(BLACK)
         
-        # Draw pentagon
-        pygame.draw.polygon(screen, DARK_GRAY, vertices)
-        pygame.draw.polygon(screen, WHITE, vertices, 2)
+        # Draw neon glow effect for polygon edges if enabled
+        if neon_glow_enabled:
+            draw_neon_glow(vertices, NEON_COLORS[0])
+        
+        # Draw pentagon filled with black
+        pygame.draw.polygon(screen, BLACK, vertices)
+        
+        # Draw pentagon white border
+        pygame.draw.polygon(screen, WHITE, vertices, 10)
         
         # Draw trail if enabled
         if trail_enabled and len(trail_points) > 1:
@@ -590,6 +661,20 @@ def main():
         # Draw toggle state text
         state_text = small_font.render(f"Add Edge {'ON' if add_edge_enabled else 'OFF'}", True, WHITE)
         screen.blit(state_text, (button_rect.x - 20, button_rect.y + button_rect.height + 10))
+        
+        # Draw Neon Glow button
+        neon_glow_button_color = BUTTON_HOVER if neon_glow_button_rect.collidepoint(pygame.mouse.get_pos()) else BUTTON_COLOR
+        pygame.draw.rect(screen, neon_glow_button_color, neon_glow_button_rect)
+        pygame.draw.rect(screen, WHITE, neon_glow_button_rect, 2)
+        
+        # Draw neon glow button text
+        neon_glow_button_text = font.render("GLOW", True, WHITE)
+        neon_glow_text_rect = neon_glow_button_text.get_rect(center=neon_glow_button_rect.center)
+        screen.blit(neon_glow_button_text, neon_glow_text_rect)
+        
+        # Draw neon glow toggle state text
+        neon_glow_state_text = small_font.render(f"Glow {'ON' if neon_glow_enabled else 'OFF'}", True, WHITE)
+        screen.blit(neon_glow_state_text, (neon_glow_button_rect.x - 20, neon_glow_button_rect.y + neon_glow_button_rect.height + 10))
         
         # Draw Trail button
         trail_button_color = BUTTON_HOVER if trail_button_rect.collidepoint(pygame.mouse.get_pos()) else BUTTON_COLOR
