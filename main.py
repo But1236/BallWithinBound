@@ -4,6 +4,13 @@ import math
 import random
 import colorsys
 from pygame import gfxdraw
+import numpy as np
+try:
+    from drum_detection import DrumDetector
+    DRUM_DETECTION_AVAILABLE = True
+except ImportError:
+    DRUM_DETECTION_AVAILABLE = False
+    print("Drum detection module not available. Using simulated beats.")
 
 # Enable high DPI awareness for better display quality
 try:
@@ -47,6 +54,27 @@ NEON_COLORS = [
 acceleration = 9.8  # Default acceleration (Earth's gravity)
 collision_coefficient = 1.0  # Default collision coefficient (elastic)
 
+# Music parameters
+music_enabled = False
+music_playing = False
+music_channel = None  # Channel for playing music
+
+# Beat detection parameters
+last_volume = 0
+volume_threshold = 0.1  # Threshold for detecting volume peaks
+beat_detected = False
+beat_cooldown = 0  # Cooldown timer to prevent multiple beats from triggering too quickly
+last_beat_time = 0  # Time of last beat
+beat_interval = 0  # Interval between beats in seconds
+
+# Drum detection
+drum_detector = None  # Will be initialized when music is enabled
+prev_audio_frame = None  # Store previous audio frame for spectral flux calculation
+
+# Music text animation parameters
+music_text_animation_time = 0  # Time elapsed since music was enabled
+music_text_animation_duration = 2.0  # Duration of the animation in seconds
+
 # Trail parameters
 trail_enabled = False  # Default trail state
 trail_duration = 1.5  # Default trail duration in seconds
@@ -81,7 +109,8 @@ except:
     font = pygame.font.Font(None, 48)
     small_font = pygame.font.Font(None, 36)
 
-# Clock for controlling frame rate
+# Clock for controlling fra
+# me rate
 clock = pygame.time.Clock()
 FPS = 60
 
@@ -91,11 +120,17 @@ try:
     sound_s1 = pygame.mixer.Sound("coin-collect.mp3")
     sound_s2 = pygame.mixer.Sound("toast-glass.mp3")
     sound_s3 = pygame.mixer.Sound("wood-crack.mp3")
-except pygame.error:
+    print("Sound effects loaded successfully")
+except pygame.error as e:
     # If sound files are not found, create dummy sound objects
+    print(f"Error loading sound effects: {e}")
     sound_s1 = None
     sound_s2 = None
     sound_s3 = None
+
+# Music file
+music_file = "hktk.mp3"
+music_playing = False
 
 def get_polygon_vertices(center, radius, angle, num_sides):
     """Calculate the vertices of a regular polygon"""
@@ -260,48 +295,60 @@ def handle_collision(ball_vel, normal, collision_coefficient):
 
 def draw_neon_glow(vertices, neon_color):
     """Draw neon glow effect for polygon as a whole to avoid gaps at connections"""
-    # Draw multiple layers with decreasing alpha for glow effect (reduced to 6 layers for better performance)
-    for j in range(6, 0, -1):
-        # Calculate alpha based on layer (outer layers more transparent, lower base transparency)
-        # Make the closest layer (j=1) completely opaque
-        if j == 1:
-            alpha = 255  # Completely opaque for the closest layer
-        else:
-            alpha = 100 - j * 15  # From 100 to 25 (lower base transparency to reduce brightness)
-        alpha = max(0, min(255, alpha))  # Clamp between 0 and 255
+    # Pre-calculate center point
+    center_x = sum(v[0] for v in vertices) / len(vertices)
+    center_y = sum(v[1] for v in vertices) / len(vertices)
+    
+    # Pre-calculate direction vectors for all vertices
+    directions = []
+    for vertex in vertices:
+        dx = vertex[0] - center_x
+        dy = vertex[1] - center_y
+        distance = math.sqrt(dx*dx + dy*dy)
+        if distance > 0:
+            dx /= distance
+            dy /= distance
+        directions.append((dx, dy))
+    
+    # Draw multiple nested polygons directly on the screen for better performance
+    # Use 5 layers with decreasing size and alpha for a smooth glow effect
+    for i in range(5):
+        # Calculate alpha and radius for this layer (wider glow)
+        alpha = 150 - i * 25  # 150, 125, 100, 75, 50
+        alpha = max(30, alpha)  # Minimum alpha of 30
+        glow_radius = (5 - i) * 6  # 30, 24, 18, 12, 6 (wider glow)
         
-        # Draw expanded polygon for glow effect (1x wider than original line)
-        glow_radius = j * 6  # From 36 to 6 for more visible glow (1x wider)
+        # Use brighter colors for inner layers and darker for outer layers
+        if i == 0:  # Innermost layer
+            glow_color = (255, 255, 0)  # Bright yellow
+        elif i == 1:
+            glow_color = (200, 200, 0)  # Medium yellow
+        elif i == 2:
+            glow_color = (150, 150, 0)  # Medium-dark yellow
+        elif i == 3:
+            glow_color = (100, 100, 0)  # Dark yellow
+        else:  # Outermost layer
+            glow_color = (50, 50, 0)  # Very dark yellow
         
-        # Create expanded vertices for glow effect
+        # Create expanded vertices for glow effect using pre-calculated directions
         glow_vertices = []
-        center_x = sum(v[0] for v in vertices) / len(vertices)
-        center_y = sum(v[1] for v in vertices) / len(vertices)
-        
-        for vertex in vertices:
-            # Calculate direction vector from center to vertex
-            dx = vertex[0] - center_x
-            dy = vertex[1] - center_y
-            distance = math.sqrt(dx*dx + dy*dy)
-            
-            # Normalize and expand
-            if distance > 0:
-                dx /= distance
-                dy /= distance
-                
-            # Expand vertex outward
+        for j, vertex in enumerate(vertices):
+            dx, dy = directions[j]
             glow_x = vertex[0] + dx * glow_radius
             glow_y = vertex[1] + dy * glow_radius
             glow_vertices.append((glow_x, glow_y))
         
-        # Create a temporary surface for this layer
-        temp_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        
-        # Draw filled polygon with glow color and alpha
-        pygame.draw.polygon(temp_surface, (*neon_color, alpha), glow_vertices)
-        
-        # Blit the glow layer onto the main screen
-        screen.blit(temp_surface, (0, 0))
+        # Draw directly to screen with per-pixel alpha (no temporary surface needed)
+        # For better performance, we'll draw directly without creating temporary surfaces
+        # This is possible by using the gfxdraw module which supports alpha blending
+        try:
+            # Use gfxdraw.filled_polygon for better performance with alpha blending
+            pygame.gfxdraw.filled_polygon(screen, glow_vertices, (*glow_color, alpha))
+        except:
+            # Fallback to the surface method if gfxdraw is not available or causes issues
+            temp_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            pygame.draw.polygon(temp_surface, (*glow_color, alpha), glow_vertices)
+            screen.blit(temp_surface, (0, 0))
 
 def create_slider(x, y, width, height, value, min_val, max_val, dragging=False):
     """Create a slider control"""
@@ -422,7 +469,7 @@ def initialize_ball_state(seed_value):
     ball_vel[1] = speed * math.sin(angle)
 
 def main():
-    global rotation_angle, ball_pos, ball_vel, acceleration, collision_coefficient, random_seed, num_edges, trail_enabled, trail_duration, sound_state
+    global rotation_angle, ball_pos, ball_vel, acceleration, collision_coefficient, random_seed, num_edges, trail_enabled, trail_duration, sound_state, music_enabled, music_channel
     
     # Initialize ball state with random seed
     initialize_ball_state(random_seed)
@@ -445,6 +492,9 @@ def main():
     neon_glow_button_rect = pygame.Rect(WIDTH - 150, 160, 150, 90)  # Moved down to avoid overlapping with Add Edge text
     trail_button_rect = pygame.Rect(WIDTH - 350, 10, 180, 90)  # 1.5x size
     sound_button_rect = pygame.Rect(WIDTH - 580, 10, 200, 90)  # 1.5x size (moved left)
+    
+    # Music button
+    music_button_rect = pygame.Rect(WIDTH - 150, HEIGHT - 100, 140, 90)  # Bottom-right corner
     
     running = True
     while running:
@@ -488,7 +538,53 @@ def main():
                 # Check if clicking on sound toggle button
                 if sound_button_rect.collidepoint(mouse_x, mouse_y):
                     sound_state = (sound_state + 1) % 4  # Cycle through 0, 1, 2, 3
+                    
+                # Check if clicking on music toggle button
+                if music_button_rect.collidepoint(mouse_x, mouse_y):
+                    music_enabled = not music_enabled
+                    if music_enabled:
+                        # Start music mode
+                        acceleration = 0
+                        collision_coefficient = 1.0
+                        # Set ball speed to 30
+                        speed = 30
+                        # Keep the same direction
+                        current_speed = math.sqrt(ball_vel[0]**2 + ball_vel[1]**2)
+                        if current_speed > 0:
+                            ball_vel[0] = ball_vel[0] / current_speed * speed
+                            ball_vel[1] = ball_vel[1] / current_speed * speed
+                        # Start playing music
+                        try:
+                            pygame.mixer.music.load(music_file)
+                            pygame.mixer.music.play(-1)  # Loop indefinitely
+                            music_playing = True
+                            print("Music started playing")
+                        except Exception as e:
+                            print(f"Error playing music: {e}")
+                            music_playing = False
+                            # Even if music doesn't play, we still enable music mode
+                            print("Music mode enabled without audio")
+                        # Reset music text animation
+                        music_text_animation_time = 0
+                        # Initialize beat detection variables
+                        last_beat_time = pygame.time.get_ticks() / 1000.0
+                        # Initialize drum detector if available
+                        if DRUM_DETECTION_AVAILABLE:
+                            # Default BPM hint is 76
+                            drum_detector = DrumDetector(bpm_hint=76)
+                        # Automatically enable trail in music mode
+                        trail_enabled = True
+                    else:
+                        # Reset to default values
+                        acceleration = 9.8
+                        collision_coefficient = 1.0
+                        # Stop music
+                        pygame.mixer.music.stop()
+                        music_playing = False
+                        # Clear drum detector
+                        drum_detector = None
                 
+                    
             elif event.type == pygame.MOUSEBUTTONUP:
                 dragging_acceleration = False
                 dragging_collision = False
@@ -512,7 +608,7 @@ def main():
                     # Calculate new trail duration value (0.5 to 10.0 seconds)
                     relative_x = max(0, min(slider_width, mouse_x - slider_x))
                     trail_duration = 0.5 + (relative_x / slider_width) * 9.5  # Range: 0.5 to 10.0
-                
+                    
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r:  # Press 'R' to reinitialize with same seed
                     initialize_ball_state(random_seed)
@@ -545,7 +641,11 @@ def main():
             
             # Create particle explosion at collision point
             if closest_point:
-                particle_system.add_explosion(closest_point[0], closest_point[1])
+                # In music mode, create more particles with longer distance
+                if music_enabled:
+                    particle_system.add_explosion(closest_point[0], closest_point[1], num_particles=60, max_distance=4.5 * ball_radius * 4)  # 2x distance
+                else:
+                    particle_system.add_explosion(closest_point[0], closest_point[1])
             
             # Increase edges on collision if toggle is enabled
             if add_edge_enabled:
@@ -558,6 +658,113 @@ def main():
                 sound_s2.play()
             elif sound_state == 3 and sound_s3:
                 sound_s3.play()
+                
+        # Music mode logic
+        if music_enabled:
+            # Increase polygon edges until reaching 128
+            if num_edges < 128:
+                num_edges += 1
+                
+            # Update music text animation time
+            music_text_animation_time += dt
+            
+            # Real-time beat detection using drum detector if available
+            current_time = pygame.time.get_ticks() / 1000.0  # Convert to seconds
+            
+            # Use drum detector if available, otherwise use simulated beats
+            global prev_audio_frame  # Access the global variable
+            if DRUM_DETECTION_AVAILABLE and drum_detector and music_playing:
+                # Get audio data from pygame mixer
+                # Note: This is a simplified approach. In a real implementation, you would
+                # need to access the raw audio data from the music file.
+                # For now, we'll generate synthetic audio data for demonstration.
+                # In practice, you would use pygame.mixer.get_raw() or similar.
+                
+                # Generate synthetic audio frame for demonstration
+                # In a real implementation, this would come from the actual audio stream
+                # Generate more dynamic audio data to simulate actual music
+                # Create a more complex audio signal with varying energy levels
+                t = current_time
+                # Base frequency components
+                freq1 = 220  # A3 note
+                freq2 = 440  # A4 note
+                freq3 = 880  # A5 note
+                
+                # Generate time array for the frame
+                frame_samples = 1024
+                sample_rate = 44100
+                time_array = np.linspace(t, t + frame_samples/sample_rate, frame_samples)
+                
+                # Generate composite waveform with harmonics
+                audio_frame = (
+                    np.sin(2 * np.pi * freq1 * time_array) * 0.3 +
+                    np.sin(2 * np.pi * freq2 * time_array) * 0.2 +
+                    np.sin(2 * np.pi * freq3 * time_array) * 0.1 +
+                    np.random.normal(0, 0.05, frame_samples)  # Add some noise
+                )
+                
+                # Occasionally add drum-like transients to simulate beats
+                if np.random.random() < 0.05:  # 5% chance of a beat
+                    # Add a transient (sharp spike) to simulate a drum hit
+                    transient_length = 50
+                    transient = np.exp(-np.linspace(0, 5, transient_length)) * np.random.random()
+                    if len(audio_frame) > transient_length:
+                        audio_frame[:transient_length] += transient * 2.0
+                
+                # Detect beat using drum detector with previous frame for spectral flux
+                beat_detected = drum_detector.detect_beat(audio_frame, current_time, prev_audio_frame)
+                
+                # Store current frame for next iteration
+                prev_audio_frame = audio_frame.copy()
+            else:
+                # Fallback to simulated beats if drum detector is not available
+                if current_time - last_beat_time >= 0.5:
+                    # Simulate a beat detection
+                    beat_detected = True
+                    # Update last beat time
+                    last_beat_time = current_time
+                else:
+                    beat_detected = False
+                
+            # If a beat is detected, adjust the ball's speed to ensure it collides with the polygon
+            if beat_detected:
+                # Calculate distance to center
+                dx = ball_pos[0] - pentagon_center[0]
+                dy = ball_pos[1] - pentagon_center[1]
+                distance_to_center = math.sqrt(dx*dx + dy*dy)
+                
+                # For a circle approximation, we want the ball to travel a certain distance in one beat
+                # We'll use a fixed distance for simplicity
+                target_distance = 200  # Adjust this value as needed
+                
+                # Time between beats (we'll use a fixed value since we can't access actual audio data)
+                beat_time = 0.5  # 0.5 seconds between beats
+                
+                # Speed needed to travel target distance in one beat
+                target_speed = target_distance / beat_time
+                
+                # Adjust current speed to match target speed (keep direction)
+                current_speed = math.sqrt(ball_vel[0]**2 + ball_vel[1]**2)
+                if current_speed > 0:
+                    # Scale velocity to match target speed
+                    scale_factor = target_speed / current_speed
+                    ball_vel[0] *= scale_factor
+                    ball_vel[1] *= scale_factor
+                    
+                    # After adjusting speed, check for immediate collision
+                    # This will create the visual effect of the ball bouncing on the beat
+                    collision, normal, closest_point = check_collision(ball_pos, ball_radius, vertices)
+                    if collision:
+                        # Handle collision response
+                        handle_collision(ball_vel, normal, collision_coefficient)
+                        
+                        # Create particle explosion at collision point
+                        if closest_point:
+                            # In music mode, create more particles with longer distance
+                            if music_enabled:
+                                particle_system.add_explosion(closest_point[0], closest_point[1], num_particles=60, max_distance=4.5 * ball_radius * 4)  # 2x distance
+                            else:
+                                particle_system.add_explosion(closest_point[0], closest_point[1])
                 
         # Update particle system
         particle_system.update()
@@ -644,8 +851,9 @@ def main():
         # Draw pentagon center point
         pygame.draw.circle(screen, WHITE, pentagon_center, 3)
         
-        # Draw ball
-        pygame.draw.circle(screen, RED, (int(ball_pos[0]), int(ball_pos[1])), ball_radius)
+        # Draw ball (change color to blue when music is enabled)
+        ball_color = (0, 0, 255) if music_enabled else RED  # Blue when music is enabled
+        pygame.draw.circle(screen, ball_color, (int(ball_pos[0]), int(ball_pos[1])), ball_radius)
         
         # Draw toggle buttons
         # Draw EDGE button
@@ -709,6 +917,21 @@ def main():
         sound_text_rect = sound_button_text.get_rect(center=sound_button_rect.center)
         screen.blit(sound_button_text, sound_text_rect)
         
+        # Draw Music button
+        music_button_color = BUTTON_HOVER if music_button_rect.collidepoint(pygame.mouse.get_pos()) else BUTTON_COLOR
+        pygame.draw.rect(screen, music_button_color, music_button_rect)
+        pygame.draw.rect(screen, WHITE, music_button_rect, 2)
+        
+        # Draw music button text
+        music_button_text = font.render("MUSIC", True, WHITE)
+        music_text_rect = music_button_text.get_rect(center=music_button_rect.center)
+        screen.blit(music_button_text, music_text_rect)
+        
+        # Draw music toggle state text
+        music_state_text = small_font.render(f"Music {'ON' if music_enabled else 'OFF'}", True, WHITE)
+        screen.blit(music_state_text, (music_button_rect.x - 20, music_button_rect.y + music_button_rect.height + 10))
+        
+        
         # Draw UI sliders and text
         acc_slider_y = 30
         col_slider_y = 30 + slider_margin
@@ -741,6 +964,33 @@ def main():
         # Display current number of edges in bottom-left corner
         edges_text = small_font.render(f"Edges: {num_edges}", True, WHITE)
         screen.blit(edges_text, (10, HEIGHT - 50))
+        
+        # Display animated "Music！！！" text when music is enabled
+        if music_enabled:
+            # Calculate animation progress (0.0 to 1.0)
+            animation_progress = min(1.0, music_text_animation_time / music_text_animation_duration)
+            
+            # Calculate text size to occupy 9/16 of window area
+            # 9/16 of window height
+            text_height = int(HEIGHT * 9 / 16)
+            # Create a large font for the text (use default font)
+            try:
+                font_size = min(text_height // 2, 200)  # Cap the font size at 200
+                large_font = pygame.font.SysFont('Arial', font_size)
+            except:
+                # Fallback to default font if Arial is not available
+                large_font = pygame.font.Font(None, font_size)
+            music_text = large_font.render("Music!!!", True, WHITE)
+            
+            # Calculate text position for sliding animation
+            # Start from below the screen (y = HEIGHT) and move to above the screen (y = -text_height)
+            start_y = HEIGHT
+            end_y = -text_height
+            current_y = start_y + (end_y - start_y) * animation_progress
+            
+            # Center the text horizontally
+            music_text_rect = music_text.get_rect(centerx=WIDTH // 2, y=int(current_y))
+            screen.blit(music_text, music_text_rect)
         
         # Update display
         pygame.display.flip()
