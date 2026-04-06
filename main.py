@@ -546,24 +546,15 @@ def main():
                         # Start music mode
                         acceleration = 0
                         collision_coefficient = 1.0
-                        # Set ball speed to 30
-                        speed = 30
+                        # Set ball speed to a higher value for more collisions
+                        speed = 5000
                         # Keep the same direction
                         current_speed = math.sqrt(ball_vel[0]**2 + ball_vel[1]**2)
                         if current_speed > 0:
                             ball_vel[0] = ball_vel[0] / current_speed * speed
                             ball_vel[1] = ball_vel[1] / current_speed * speed
-                        # Start playing music
-                        try:
-                            pygame.mixer.music.load(music_file)
-                            pygame.mixer.music.play(-1)  # Loop indefinitely
-                            music_playing = True
-                            print("Music started playing")
-                        except Exception as e:
-                            print(f"Error playing music: {e}")
-                            music_playing = False
-                            # Even if music doesn't play, we still enable music mode
-                            print("Music mode enabled without audio")
+                        # Flag to track if we've reached 64 edges and disabled add edge
+                        reached_64_edges = False
                         # Reset music text animation
                         music_text_animation_time = 0
                         # Initialize beat detection variables
@@ -574,6 +565,10 @@ def main():
                             drum_detector = DrumDetector(bpm_hint=76)
                         # Automatically enable trail in music mode
                         trail_enabled = True
+                        # Automatically enable add edge feature in music mode
+                        add_edge_enabled = True
+                        # Music playback will start when polygon reaches 64 edges
+                        music_playing = False
                     else:
                         # Reset to default values
                         acceleration = 9.8
@@ -661,10 +656,31 @@ def main():
                 
         # Music mode logic
         if music_enabled:
-            # Increase polygon edges until reaching 128
-            if num_edges < 128:
-                num_edges += 1
-                
+            # Check if polygon has reached 64 edges and we haven't disabled add edge yet
+            if num_edges >= 64 and not reached_64_edges:
+                # Disable add edge feature
+                add_edge_enabled = False
+                # Set the flag to indicate we've reached 64 edges and disabled add edge
+                reached_64_edges = True
+                # Start playing music
+                try:
+                    pygame.mixer.music.load(music_file)
+                    pygame.mixer.music.play(-1)  # Loop indefinitely
+                    music_playing = True
+                    print("Music started playing")
+                except Exception as e:
+                    print(f"Error playing music: {e}")
+                    # Even if music doesn't play, we continue with the music mode
+                    print("Continuing music mode without audio")
+                # Change speed to normal value for drum beats
+                speed = 150  # Normal speed
+                current_speed = math.sqrt(ball_vel[0]**2 + ball_vel[1]**2)
+                if current_speed > 0:
+                    # Scale velocity to match target speed while keeping direction
+                    scale_factor = speed / current_speed
+                    ball_vel[0] *= scale_factor
+                    ball_vel[1] *= scale_factor
+            
             # Update music text animation time
             music_text_animation_time += dt
             
@@ -726,8 +742,8 @@ def main():
                 else:
                     beat_detected = False
                 
-            # If a beat is detected, adjust the ball's speed to ensure it collides with the polygon
-            if beat_detected:
+            # If a beat is detected and we've reached 64 edges, adjust the ball's speed to ensure it collides with the polygon
+            if beat_detected and reached_64_edges:
                 # Calculate distance to center
                 dx = ball_pos[0] - pentagon_center[0]
                 dy = ball_pos[1] - pentagon_center[1]
