@@ -318,17 +318,17 @@ def draw_neon_glow(vertices, neon_color):
         alpha = max(30, alpha)  # Minimum alpha of 30
         glow_radius = (5 - i) * 6  # 30, 24, 18, 12, 6 (wider glow)
         
-        # Use brighter colors for inner layers and darker for outer layers
-        if i == 0:  # Innermost layer
-            glow_color = (255, 255, 0)  # Bright yellow
+        # Use high-saturation neon yellow colors suitable for gaming/cyberpunk style
+        if i == 0:  # Innermost layer - brightest
+            glow_color = (255, 255, 0)   # Pure neon yellow
         elif i == 1:
-            glow_color = (200, 200, 0)  # Medium yellow
+            glow_color = (255, 225, 30)  # Bright neon yellow
         elif i == 2:
-            glow_color = (150, 150, 0)  # Medium-dark yellow
+            glow_color = (255, 200, 60)  # Medium neon yellow
         elif i == 3:
-            glow_color = (100, 100, 0)  # Dark yellow
-        else:  # Outermost layer
-            glow_color = (50, 50, 0)  # Very dark yellow
+            glow_color = (230, 175, 40)  # Darker neon yellow
+        else:  # Outermost layer - darkest
+            glow_color = (200, 145, 20)  # Darkest neon yellow
         
         # Create expanded vertices for glow effect using pre-calculated directions
         glow_vertices = []
