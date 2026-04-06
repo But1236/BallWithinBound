@@ -24,7 +24,7 @@
    - `coin-collect.mp3`
    - `toast-glass.mp3`
    - `wood-crack.mp3`
-   - `hktk.mp3` (用于音乐模式)
+   - `starwar.mp3` (用于音乐模式)
 
 ## 使用方法
 
@@ -88,7 +88,7 @@ python main.py
 - `coin-collect.mp3` - 声音效果1 (S1)，当启用声音效果并发生碰撞时播放
 - `toast-glass.mp3` - 声音效果2 (S2)，当启用声音效果并发生碰撞时播放
 - `wood-crack.mp3` - 声音效果3 (S3)，当启用声音效果并发生碰撞时播放
-- `hktk.mp3` - 音乐模式背景音乐，在音乐模式下循环播放(默认是网络歌手王利夫的8-bit版《海阔天空》)
+- `starwar.mp3` - 音乐模式背景音乐，在音乐模式下循环播放
 
 用户可以通过 SOUND 按钮在不同声音效果之间切换，或完全关闭声音。
 
@@ -102,7 +102,7 @@ BallWithinBound/
 ├── coin-collect.mp3     # 声音效果1
 ├── toast-glass.mp3      # 声音效果2
 ├── wood-crack.mp3       # 声音效果3
-├── hktk.mp3             # 音乐模式背景音乐
+├── starwar.mp3             # 音乐模式背景音乐
 └── README.md            # 本文件
 ```
 

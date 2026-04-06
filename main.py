@@ -129,7 +129,7 @@ except pygame.error as e:
     sound_s3 = None
 
 # Music file
-music_file = "hktk.mp3"
+music_file = "starwar.mp3"
 music_playing = False
 
 def get_polygon_vertices(center, radius, angle, num_sides):
@@ -561,8 +561,14 @@ def main():
                         last_beat_time = pygame.time.get_ticks() / 1000.0
                         # Initialize drum detector if available
                         if DRUM_DETECTION_AVAILABLE:
-                            # Default BPM hint is 76
-                            drum_detector = DrumDetector(bpm_hint=76)
+                            # Use more sensitive parameters for better drum detection
+                            # Lower threshold_multiplier = more sensitive
+                            # Lower cooldown_period = more frequent detection
+                            drum_detector = DrumDetector(
+                                bpm_hint=76,
+                                threshold_multiplier=0.8,  # More sensitive (was 1.1)
+                                cooldown_period=0.02       # More frequent detection (was 0.05)
+                            )
                         # Automatically enable trail in music mode
                         trail_enabled = True
                         # Automatically enable add edge feature in music mode
@@ -690,42 +696,36 @@ def main():
             # Use drum detector if available, otherwise use simulated beats
             global prev_audio_frame  # Access the global variable
             if DRUM_DETECTION_AVAILABLE and drum_detector and music_playing:
-                # Get audio data from pygame mixer
-                # Note: This is a simplified approach. In a real implementation, you would
-                # need to access the raw audio data from the music file.
-                # For now, we'll generate synthetic audio data for demonstration.
-                # In practice, you would use pygame.mixer.get_raw() or similar.
-                
-                # Generate synthetic audio frame for demonstration
-                # In a real implementation, this would come from the actual audio stream
-                # Generate more dynamic audio data to simulate actual music
-                # Create a more complex audio signal with varying energy levels
-                t = current_time
-                # Base frequency components
-                freq1 = 220  # A3 note
-                freq2 = 440  # A4 note
-                freq3 = 880  # A5 note
-                
-                # Generate time array for the frame
-                frame_samples = 1024
-                sample_rate = 44100
-                time_array = np.linspace(t, t + frame_samples/sample_rate, frame_samples)
-                
-                # Generate composite waveform with harmonics
-                audio_frame = (
-                    np.sin(2 * np.pi * freq1 * time_array) * 0.3 +
-                    np.sin(2 * np.pi * freq2 * time_array) * 0.2 +
-                    np.sin(2 * np.pi * freq3 * time_array) * 0.1 +
-                    np.random.normal(0, 0.05, frame_samples)  # Add some noise
-                )
-                
-                # Occasionally add drum-like transients to simulate beats
-                if np.random.random() < 0.05:  # 5% chance of a beat
-                    # Add a transient (sharp spike) to simulate a drum hit
-                    transient_length = 50
-                    transient = np.exp(-np.linspace(0, 5, transient_length)) * np.random.random()
-                    if len(audio_frame) > transient_length:
-                        audio_frame[:transient_length] += transient * 2.0
+                # Try to get actual audio data from pygame mixer
+                try:
+                    # Get raw audio data from the mixer
+                    # Note: This is a simplified approach. In a real implementation, you would
+                    # need to access the raw audio data from the music file.
+                    # pygame.mixer.get_raw() returns bytes, we need to convert to numpy array
+                    raw_audio_data = pygame.mixer.get_raw()
+                    
+                    # Convert bytes to numpy array (assuming 16-bit signed integers)
+                    if len(raw_audio_data) > 0:
+                        # Convert bytes to numpy array
+                        audio_array = np.frombuffer(raw_audio_data, dtype=np.int16)
+                        
+                        # Normalize to range [-1, 1]
+                        audio_frame = audio_array.astype(np.float32) / 32768.0
+                        
+                        # If we have enough samples, use them
+                        if len(audio_frame) >= 1024:
+                            # Take a slice of the audio data for processing
+                            audio_frame = audio_frame[:1024]
+                        else:
+                            # Pad with zeros if not enough data
+                            padding = np.zeros(1024 - len(audio_frame))
+                            audio_frame = np.concatenate([audio_frame, padding])
+                    else:
+                        # If no audio data available, create a silent frame
+                        audio_frame = np.zeros(1024)
+                except:
+                    # Fallback to silent frame if there's an error
+                    audio_frame = np.zeros(1024)
                 
                 # Detect beat using drum detector with previous frame for spectral flux
                 beat_detected = drum_detector.detect_beat(audio_frame, current_time, prev_audio_frame)
@@ -742,45 +742,54 @@ def main():
                 else:
                     beat_detected = False
                 
-            # If a beat is detected and we've reached 64 edges, adjust the ball's speed to ensure it collides with the polygon
+            # If a beat is detected and we've reached 64 edges, trigger an immediate collision
             if beat_detected and reached_64_edges:
-                # Calculate distance to center
-                dx = ball_pos[0] - pentagon_center[0]
-                dy = ball_pos[1] - pentagon_center[1]
-                distance_to_center = math.sqrt(dx*dx + dy*dy)
-                
-                # For a circle approximation, we want the ball to travel a certain distance in one beat
-                # We'll use a fixed distance for simplicity
-                target_distance = 200  # Adjust this value as needed
-                
-                # Time between beats (we'll use a fixed value since we can't access actual audio data)
-                beat_time = 0.5  # 0.5 seconds between beats
-                
-                # Speed needed to travel target distance in one beat
-                target_speed = target_distance / beat_time
-                
-                # Adjust current speed to match target speed (keep direction)
-                current_speed = math.sqrt(ball_vel[0]**2 + ball_vel[1]**2)
-                if current_speed > 0:
-                    # Scale velocity to match target speed
-                    scale_factor = target_speed / current_speed
-                    ball_vel[0] *= scale_factor
-                    ball_vel[1] *= scale_factor
+                # Directly trigger a collision with the polygon to make the ball bounce
+                collision, normal, closest_point = check_collision(ball_pos, ball_radius, vertices)
+                if collision:
+                    # Handle collision response
+                    handle_collision(ball_vel, normal, collision_coefficient)
                     
-                    # After adjusting speed, check for immediate collision
-                    # This will create the visual effect of the ball bouncing on the beat
-                    collision, normal, closest_point = check_collision(ball_pos, ball_radius, vertices)
-                    if collision:
+                    # Create particle explosion at collision point
+                    if closest_point:
+                        # In music mode, create more particles with longer distance
+                        if music_enabled:
+                            particle_system.add_explosion(closest_point[0], closest_point[1], num_particles=60, max_distance=4.5 * ball_radius * 4)  # 2x distance
+                        else:
+                            particle_system.add_explosion(closest_point[0], closest_point[1])
+                else:
+                    # If no collision detected, force a collision by pushing the ball toward the nearest edge
+                    # Find the closest edge and create a collision
+                    min_distance = float('inf')
+                    closest_edge_normal = None
+                    closest_edge_point = None
+                    
+                    # Check all edges to find the closest one
+                    for i in range(len(vertices)):
+                        start = vertices[i]
+                        end = vertices[(i + 1) % len(vertices)]
+                        
+                        distance, projection = distance_point_to_line(ball_pos, start, end)
+                        if distance < min_distance:
+                            min_distance = distance
+                            closest_edge_point = projection
+                            
+                            # Calculate normal vector (perpendicular to the edge)
+                            edge_vec = (end[0] - start[0], end[1] - start[1])
+                            normal = (-edge_vec[1], edge_vec[0])
+                            
+                            # Normalize normal vector
+                            normal_length = math.sqrt(normal[0]**2 + normal[1]**2)
+                            if normal_length > 0:
+                                closest_edge_normal = (normal[0] / normal_length, normal[1] / normal_length)
+                    
+                    # Force a collision with the closest edge
+                    if closest_edge_normal and closest_edge_point:
                         # Handle collision response
-                        handle_collision(ball_vel, normal, collision_coefficient)
+                        handle_collision(ball_vel, closest_edge_normal, collision_coefficient)
                         
                         # Create particle explosion at collision point
-                        if closest_point:
-                            # In music mode, create more particles with longer distance
-                            if music_enabled:
-                                particle_system.add_explosion(closest_point[0], closest_point[1], num_particles=60, max_distance=4.5 * ball_radius * 4)  # 2x distance
-                            else:
-                                particle_system.add_explosion(closest_point[0], closest_point[1])
+                        particle_system.add_explosion(closest_edge_point[0], closest_edge_point[1], num_particles=60, max_distance=4.5 * ball_radius * 4)
                 
         # Update particle system
         particle_system.update()
