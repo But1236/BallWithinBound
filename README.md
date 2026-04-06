@@ -81,6 +81,17 @@ python main.py
 - 视觉效果 (颜色, 轨迹持续时间)
 - 音频设置 (音量阈值, 节拍检测参数)
 
+## 音频文件说明
+
+项目包含以下四个音频文件，每个都有特定的用途：
+
+- `coin-collect.mp3` - 声音效果1 (S1)，当启用声音效果并发生碰撞时播放
+- `toast-glass.mp3` - 声音效果2 (S2)，当启用声音效果并发生碰撞时播放
+- `wood-crack.mp3` - 声音效果3 (S3)，当启用声音效果并发生碰撞时播放
+- `hktk.mp3` - 音乐模式背景音乐，在音乐模式下循环播放(默认是网络歌手王利夫的8-bit版《海阔天空》)
+
+用户可以通过 SOUND 按钮在不同声音效果之间切换，或完全关闭声音。
+
 ## 文件结构
 
 ```
@@ -88,8 +99,11 @@ BallWithinBound/
 ├── main.py              # 主应用程序
 ├── drum_detection.py    # 节拍检测算法
 ├── requirements.txt     # Python 依赖
-├── *.mp3               # 音频文件
-└── README.md           # 本文件
+├── coin-collect.mp3     # 声音效果1
+├── toast-glass.mp3      # 声音效果2
+├── wood-crack.mp3       # 声音效果3
+├── hktk.mp3             # 音乐模式背景音乐
+└── README.md            # 本文件
 ```
 
 ## 功能特点
